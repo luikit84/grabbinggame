@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>夢幻夾公仔大冒險 - Arcade Claw Machine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            background: radial-gradient(circle at center, #1a103c 0%, #0b0618 100%);
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 街機霓虹燈效 */
+        .neon-border {
+            box-shadow: 0 0 15px rgba(236, 72, 153, 0.6), inset 0 0 15px rgba(236, 72, 153, 0.4);
+        }
+        .neon-text-pink {
+            text-shadow: 0 0 10px rgba(244, 114, 182, 0.8), 0 0 20px rgba(236, 72, 153, 0.6);
+        }
+        .neon-text-yellow {
+            text-shadow: 0 0 10px rgba(253, 224, 71, 0.8), 0 0 20px rgba(234, 179, 8, 0.6);
+        }
+
+        /* 街機按鈕立體感 */
+        .arcade-btn {
+            transition: all 0.1s ease;
+            box-shadow: 0 8px 0 #9f1239, 0 12px 15px rgba(0, 0, 0, 0.5);
+        }
+        .arcade-btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 2px 0 #9f1239, 0 5px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .coin-btn {
+            box-shadow: 0 6px 0 #b45309, 0 10px 12px rgba(0,0,0,0.4);
+        }
+        .coin-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #b45309, 0 4px 6px rgba(0,0,0,0.4);
+        }
+
+        /* 閃爍動畫 */
+        @keyframes marquee {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+        .animate-marquee {
+            animation: marquee 1.5s infinite;
+        }
+
+        /* 抓爪掉落動畫 */
+        @keyframes clawShake {
+            0% { transform: rotate(0deg); }
+            25% { transform: rotate(-4deg); }
+            75% { transform: rotate(4deg); }
+            100% { transform: rotate(0deg); }
+        }
+        .shaking {
+            animation: clawShake 0.2s infinite;
+        }
+
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ec4899;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-white flex flex-col items-center justify-between p-2 sm:p-4 overflow-x-hidden select-none">
+
+    <!-- 頂部資訊列 -->
+    <header class="w-full max-w-lg flex items-center justify-between bg-slate-900/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-pink-500/30 mb-2 shadow-lg">
+        <div class="flex items-center space-x-2">
+            <div class="w-10 h-10 bg-gradient-to-tr from-yellow-400 to-amber-500 rounded-full flex items-center justify-center shadow-md border border-yellow-200">
+                <i class="fa-solid fa-coins text-yellow-900 text-xl"></i>
+            </div>
+            <div>
+                <div class="text-xs text-slate-400 font-bold uppercase">代幣 Coins</div>
+                <div id="coinCount" class="text-xl font-black text-yellow-400 tracking-wider">10</div>
+            </div>
+        </div>
+
+        <h1 class="text-xl font-black italic bg-clip-text text-transparent bg-gradient-to-r from-pink-400 via-purple-300 to-cyan-300 hidden sm:block">
+            夢幻娃娃機
+        </h1>
+
+        <div class="flex items-center space-x-2">
+            <button id="collectionBtn" class="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-xs font-bold px-3 py-2 rounded-xl border border-indigo-400/50 flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-boxes-stacked text-pink-300 text-sm"></i>
+                <span>圖鑑 (<span id="caughtUniqueCount">0</span>/8)</span>
+            </button>
+            <button id="addCoinBtn" class="coin-btn bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-900 font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1">
+                <i class="fa-solid fa-plus text-sm"></i> 補充
+            </button>
+        </div>
+    </header>
+
+    <!-- 娃娃池重排與刷新功能列 -->
+    <div class="w-full max-w-lg flex items-center justify-between gap-2 mb-2 px-1">
+        <button id="shuffleBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-cyan-300 text-xs font-bold py-2 px-3 rounded-xl border border-cyan-500/30 flex items-center justify-center gap-1.5 shadow-md transition">
+            <i class="fa-solid fa-shuffle text-cyan-400"></i>
+            <span>重新排列娃娃</span>
+        </button>
+        <button id="refreshPoolBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-emerald-300 text-xs font-bold py-2 px-3 rounded-xl border border-emerald-500/30 flex items-center justify-center gap-1.5 shadow-md transition">
+            <i class="fa-solid fa-rotate text-emerald-400"></i>
+            <span>刷新整機娃娃</span>
+        </button>
+    </div>
+
+    <!-- 夾公仔主機台外殼 -->
+    <main class="w-full max-w-lg bg-slate-900 border-4 border-pink-500 rounded-3xl p-3 sm:p-4 shadow-2xl relative neon-border flex flex-col items-center">
+        
+        <!-- 頂部霓虹燈牌 -->
+        <div class="w-full bg-gradient-to-r from-purple-900 via-pink-600 to-indigo-900 py-2 px-4 rounded-2xl border-2 border-pink-300 mb-2 flex justify-between items-center shadow-inner relative overflow-hidden">
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-pink-400 animate-marquee"></span>
+                <span class="w-3 h-3 rounded-full bg-yellow-300 animate-marquee" style="animation-delay: 0.3s"></span>
+                <span class="w-3 h-3 rounded-full bg-cyan-400 animate-marquee" style="animation-delay: 0.6s"></span>
+            </div>
+            <div class="text-center font-black tracking-widest text-lg sm:text-xl text-yellow-300 neon-text-yellow uppercase">
+                <i class="fa-solid fa-crown mr-1 text-yellow-400"></i> PRIZE CLAW <i class="fa-solid fa-crown ml-1 text-yellow-400"></i>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-cyan-400 animate-marquee" style="animation-delay: 0.6s"></span>
+                <span class="w-3 h-3 rounded-full bg-yellow-300 animate-marquee" style="animation-delay: 0.3s"></span>
+                <span class="w-3 h-3 rounded-full bg-pink-400 animate-marquee"></span>
+            </div>
+        </div>
+
+        <!-- 遊戲畫布 (夾公仔機內部玻璃艙) -->
+        <div class="relative w-full aspect-[4/5] bg-slate-950 rounded-2xl border-4 border-slate-800 overflow-hidden shadow-inner flex flex-col items-center justify-center">
+            
+            <!-- 玻璃光澤與機照背景 -->
+            <div class="absolute inset-0 bg-gradient-to-b from-indigo-950/40 via-purple-950/20 to-slate-950 pointer-events-none z-10"></div>
+            <!-- 玻璃反射斜線 -->
+            <div class="absolute top-0 right-0 w-full h-full bg-gradient-to-bl from-white/10 via-transparent to-transparent pointer-events-none z-20"></div>
+
+            <!-- 繪圖 Canvas -->
+            <canvas id="gameCanvas" class="w-full h-full block z-0 cursor-crosshair"></canvas>
+
+            <!-- 狀態提示 Floating Banner -->
+            <div id="gameStatusBanner" class="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-yellow-400/80 px-4 py-1.5 rounded-full text-xs font-bold text-yellow-300 z-30 shadow-lg backdrop-blur-sm transition-all duration-300 opacity-100 flex items-center gap-2">
+                <i class="fa-solid fa-hand-pointer animate-bounce text-pink-400"></i>
+                <span id="statusText">按左右按鈕移動爪子，點擊「下爪」抓取公仔！</span>
+            </div>
+        </div>
+
+        <!-- 控制面板 (Control Panel) -->
+        <div class="w-full mt-3 bg-slate-800 border-2 border-slate-700 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+            
+            <!-- 左右移動按鍵組 -->
+            <div class="flex items-center gap-3 w-full sm:w-auto justify-center">
+                <button id="btnLeft" class="w-16 h-14 bg-gradient-to-b from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 active:scale-95 text-white rounded-2xl font-black text-2xl flex items-center justify-center shadow-md border-b-4 border-blue-800 transition active:border-b-0 active:translate-y-1">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="text-center px-1">
+                    <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">位置橫移</div>
+                    <div class="text-xs font-black text-cyan-300">POSITION</div>
+                </div>
+                <button id="btnRight" class="w-16 h-14 bg-gradient-to-b from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 active:scale-95 text-white rounded-2xl font-black text-2xl flex items-center justify-center shadow-md border-b-4 border-blue-800 transition active:border-b-0 active:translate-y-1">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- 下爪巨型發射按鈕 -->
+            <button id="btnDrop" class="arcade-btn w-full sm:w-36 h-14 bg-gradient-to-r from-rose-500 via-red-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 text-white font-black text-lg rounded-2xl flex items-center justify-center gap-2 border-2 border-pink-300/50 uppercase tracking-widest">
+                <i class="fa-solid fa-angles-down text-xl animate-bounce"></i>
+                <span>下 爪</span>
+            </button>
+        </div>
+
+        <!-- 機台取物口與提示 -->
+        <div class="w-full mt-2 flex justify-between items-center text-[11px] text-slate-400 px-2 font-bold">
+            <div class="flex items-center gap-1 text-slate-400">
+                <i class="fa-solid fa-keyboard text-pink-400"></i> 鍵盤快捷鍵: [← / A] 左移, [→ / D] 右移, [空白鍵] 下爪
+            </div>
+            <div id="soundToggle" class="cursor-pointer hover:text-white flex items-center gap-1 transition">
+                <i id="soundIcon" class="fa-solid fa-volume-high text-cyan-400"></i> 音效開啟
+            </div>
+        </div>
+    </main>
+
+    <!-- 獲獎彈窗 (Prize Win Modal) -->
+    <div id="winModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-opacity duration-300 opacity-0">
+        <div class="bg-slate-900 border-4 border-yellow-400 rounded-3xl p-5 max-w-sm w-full text-center relative shadow-2xl transform scale-90 transition-transform duration-300" id="winModalCard">
+            <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-32 h-32 bg-yellow-400/20 rounded-full blur-2xl pointer-events-none"></div>
+            
+            <div class="text-amber-400 text-sm font-black tracking-widest uppercase mb-1">CONGRATULATIONS!</div>
+            <h2 class="text-2xl font-black text-white mb-3">抓到公仔啦！</h2>
+            
+            <div class="w-28 h-28 mx-auto bg-slate-800 rounded-2xl border-2 border-slate-700 flex items-center justify-center mb-3 relative shadow-inner">
+                <div id="winPlushiePreview" class="text-6xl transform hover:scale-110 transition duration-300">🧸</div>
+                <div id="winRarityBadge" class="absolute -bottom-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase border border-yellow-200">
+                    普通 Common
+                </div>
+            </div>
+
+            <h3 id="winPlushieName" class="text-xl font-bold text-yellow-300 mb-1">棕色可愛小熊</h3>
+            <p id="winPlushieDesc" class="text-xs text-slate-300 mb-4 px-2">這是一隻毛茸茸、超受歡迎的傳統經典小熊公仔！</p>
+
+            <div class="grid grid-cols-1 gap-2 mb-3">
+                <div class="flex gap-2">
+                    <button id="replayCatchBtn" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow border border-indigo-400/40 transition active:scale-95">
+                        <i class="fa-solid fa-circle-play text-pink-300 text-sm"></i>
+                        <span>重播抓取</span>
+                    </button>
+                    <button id="downloadCardBtn" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow border border-emerald-400/40 transition active:scale-95">
+                        <i class="fa-solid fa-file-image text-emerald-200 text-sm"></i>
+                        <span>下載紀念卡</span>
+                    </button>
+                </div>
+                <button id="downloadWinVideoBtn" class="w-full py-2.5 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow border border-pink-400/40 transition active:scale-95">
+                    <i class="fa-solid fa-video text-yellow-300 text-sm"></i>
+                    <span>下載抓取精彩影片 (.webm)</span>
+                </button>
+            </div>
+
+            <button id="closeWinBtn" class="w-full py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-sm shadow-lg transition active:scale-95">
+                收下獎勵 (<span id="winCoinReward">+2 金幣</span>)
+            </button>
+        </div>
+    </div>
+
+    <!-- 抓取精彩重播彈窗 (Instant Replay Modal) -->
+    <div id="replayModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-opacity duration-300 opacity-0">
+        <div class="bg-slate-900 border-2 border-pink-500 rounded-3xl p-4 max-w-sm w-full flex flex-col items-center shadow-2xl relative">
+            <div class="flex items-center justify-between w-full border-b border-slate-800 pb-2 mb-3">
+                <div class="flex items-center gap-2 text-pink-400 font-black text-sm">
+                    <i class="fa-solid fa-video animate-pulse"></i>
+                    <span>精彩抓取畫面重播</span>
+                </div>
+                <button id="closeReplayBtn" class="text-slate-400 hover:text-white w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="relative w-full aspect-[4/5] bg-slate-950 rounded-2xl border-2 border-slate-800 overflow-hidden shadow-inner mb-3">
+                <canvas id="replayCanvas" class="w-full h-full block"></canvas>
+                <div class="absolute top-2 left-2 bg-red-600/90 text-white text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
+                    <i class="fa-solid fa-circle text-[8px]"></i> REPLAY
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 w-full">
+                <button id="restartReplayBtn" class="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-rotate-left"></i> 重頭
+                </button>
+                <button id="speedReplayBtn" class="bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-gauge-high"></i> <span id="speedText">1.0x</span>
+                </button>
+                <button id="exportVideoBtn" class="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1 border border-pink-400/50">
+                    <i class="fa-solid fa-download"></i> 影片
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 紀念卡圖片預覽/備用下載彈窗 (Card Image Preview Modal for Mobile) -->
+    <div id="cardPreviewModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-opacity duration-300 opacity-0">
+        <div class="bg-slate-900 border-2 border-emerald-500 rounded-3xl p-4 max-w-sm w-full flex flex-col items-center shadow-2xl relative">
+            <div class="flex items-center justify-between w-full border-b border-slate-800 pb-2 mb-3">
+                <div class="flex items-center gap-2 text-emerald-400 font-black text-sm">
+                    <i class="fa-solid fa-image"></i>
+                    <span>公仔紀念卡已生成</span>
+                </div>
+                <button id="closePreviewBtn" class="text-slate-400 hover:text-white w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-300 mb-2 text-center">如果瀏覽器未自動下載，請<strong class="text-yellow-300">長按下方圖片</strong>選取「儲存圖片」或「下載圖片」：</p>
+            
+            <div class="w-full bg-slate-950 rounded-xl p-2 border border-slate-800 flex justify-center mb-3">
+                <img id="cardPreviewImg" src="" alt="紀念卡預覽" class="max-h-[55vh] rounded-lg shadow-lg object-contain">
+            </div>
+
+            <button id="manualDownloadBtn" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow transition active:scale-95">
+                <i class="fa-solid fa-download"></i>
+                <span>再次嘗試下載圖片</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 公仔收藏圖鑑彈窗 (Collection Cabinet Modal) -->
+    <div id="collectionModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-opacity duration-300 opacity-0">
+        <div class="bg-slate-900 border-2 border-indigo-500 rounded-3xl p-5 max-w-md w-full max-h-[85vh] flex flex-col shadow-2xl relative">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-trophy text-yellow-400 text-xl"></i>
+                    <h2 class="text-lg font-black text-white">我的公仔收藏櫃</h2>
+                </div>
+                <button id="closeCollectionBtn" class="text-slate-400 hover:text-white w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="bg-slate-800/60 rounded-xl p-3 mb-4 flex justify-around text-center border border-slate-700/50">
+                <div>
+                    <div class="text-[10px] text-slate-400 font-bold uppercase">已解鎖種類</div>
+                    <div class="text-lg font-black text-cyan-400"><span id="colUnlockedCount">0</span> / 8</div>
+                </div>
+                <div class="border-r border-slate-700"></div>
+                <div>
+                    <div class="text-[10px] text-slate-400 font-bold uppercase">總抓獲數量</div>
+                    <div class="text-lg font-black text-pink-400" id="colTotalCaught">0</div>
+                </div>
+            </div>
+
+            <div id="collectionGrid" class="grid grid-cols-2 gap-3 overflow-y-auto pr-1 flex-1">
+            </div>
+        </div>
+    </div>
+
+    <!-- 音效 & 遊戲邏輯腳本 -->
+    <script>
+        // === 1. 音效合成器 (Web Audio API) ===
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) this.ctx = new AudioContext();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            playTone(freq, type, duration, startVol = 0.1, endVol = 0) {
+                if (this.muted) return;
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(startVol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(Math.max(endVol, 0.0001), this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {}
+            }
+            playCoin() {
+                this.playTone(987.77, 'sine', 0.1, 0.2);
+                setTimeout(() => this.playTone(1318.51, 'sine', 0.25, 0.2), 80);
+            }
+            playMove() {
+                this.playTone(150, 'triangle', 0.05, 0.05);
+            }
+            playGrab() {
+                this.playTone(300, 'square', 0.15, 0.1);
+                setTimeout(() => this.playTone(450, 'square', 0.15, 0.1), 100);
+            }
+            playWin() {
+                [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
+                    setTimeout(() => this.playTone(f, 'sine', 0.2, 0.2), i * 100);
+                });
+            }
+            playFail() {
+                this.playTone(200, 'sawtooth', 0.2, 0.15);
+                setTimeout(() => this.playTone(150, 'sawtooth', 0.3, 0.15), 180);
+            }
+        }
+        const audio = new SoundEngine();
+
+        // === 2. 公仔設定資料庫 (高抓取成功率) ===
+        const PLUSHIE_TYPES = [
+            { id: 'bear', name: '經典棕熊', emoji: '🧸', color: '#d97706', rarity: 'common', rarityText: '普通', catchRate: 0.98, points: 2, desc: '最傳統可愛的經典小熊，性格溫和，抓取成功率極高！' },
+            { id: 'cat', name: '粉紅小貓', emoji: '🐱', color: '#f472b6', rarity: 'common', rarityText: '普通', catchRate: 0.95, points: 2, desc: '帶有小鬍鬚的粉紅貓咪，最喜歡在陽光下打瞌睡。' },
+            { id: 'bunny', name: '雪白兔子', emoji: '🐰', color: '#e2e8f0', rarity: 'common', rarityText: '普通', catchRate: 0.95, points: 2, desc: '耳朵長長的小白兔，跳躍力十足，非常愛吃胡蘿蔔。' },
+            { id: 'duck', name: '黃色小鴨', emoji: '🐥', color: '#facc15', rarity: 'common', rarityText: '普通', catchRate: 0.92, points: 2, desc: '呱呱呱！圓滾滾的萌萌黃色小鴨。' },
+            { id: 'frog', name: '大眼青蛙', emoji: '🐸', color: '#4ade80', rarity: 'rare', rarityText: '稀有', catchRate: 0.88, points: 5, desc: '擁有雙大眼睛的青蛙，據說能帶來雨水與好運！' },
+            { id: 'dragon', name: '小金龍', emoji: '🐲', color: '#34d399', rarity: 'rare', rarityText: '稀有', catchRate: 0.82, points: 6, desc: '威風凜凜又有點呆萌的小綠龍，會吐出七彩泡泡。' },
+            { id: 'unicorn', name: '夢幻獨角獸', emoji: '🦄', color: '#c084fc', rarity: 'epic', rarityText: '史詩', catchRate: 0.75, points: 10, desc: '極其珍貴的獨角獸，傳說摸到它的人能獲得一整年的幸運。' },
+            { id: 'gold_bear', name: '黃金至尊熊', emoji: '👑', color: '#fbbf24', rarity: 'legendary', rarityText: '傳說', catchRate: 0.65, points: 20, desc: '全場最亮眼的黃金至尊熊！機率全面提升，抓到就是歐皇！' }
+        ];
+
+        // === 3. 遊戲核心變數與狀態管理 ===
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let coins = 10;
+        let plushies = [];
+        let chute = { x: 10, y: 0, width: 85, height: 80 };
+        let caughtCounts = {};
+        PLUSHIE_TYPES.forEach(p => caughtCounts[p.id] = 0);
+
+        let isRecording = false;
+        let replayFrames = [];
+        let lastCaughtPlushie = null;
+        let replayAnimationId = null;
+        let replaySpeed = 1.0;
+        let activeCardBlob = null;
+
+        let cw = 0;
+        let ch = 0;
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            cw = canvas.width;
+            ch = canvas.height;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        function updateStatus(msg, colorClass = "text-yellow-300") {
+            const statusText = document.getElementById('statusText');
+            if (statusText) {
+                statusText.innerText = msg;
+                statusText.className = colorClass;
+            }
+        }
+
+        const claw = {
+            x: 0,
+            y: 50,
+            clawY: 50,
+            minX: 40,
+            maxX: 0,
+            speed: 3.8,
+            dropSpeed: 5.0,
+            retractSpeed: 3.5,
+            state: 'IDLE',
+            openAngle: 0.6,
+            maxAngle: 0.75,
+            minAngle: 0.12,
+            grabbedPlushie: null,
+            willDropMidway: false
+        };
+
+        // === 4. 生成機台內的公仔池與洗牌/刷新功能 ===
+        function spawnPlushies() {
+            plushies = [];
+            const count = 14;
+            const logicalW = cw / window.devicePixelRatio || 350;
+            const logicalH = ch / window.devicePixelRatio || 450;
+            const startY = logicalH - 65;
+            const floorWidth = logicalW - 40;
+
+            for (let i = 0; i < count; i++) {
+                const rand = Math.random();
+                let selectedType = PLUSHIE_TYPES[0];
+                if (rand < 0.08) selectedType = PLUSHIE_TYPES[7];
+                else if (rand < 0.20) selectedType = PLUSHIE_TYPES[6];
+                else if (rand < 0.38) selectedType = PLUSHIE_TYPES[5];
+                else if (rand < 0.55) selectedType = PLUSHIE_TYPES[4];
+                else selectedType = PLUSHIE_TYPES[Math.floor(Math.random() * 4)];
+
+                const radius = 24;
+                const px = chute.width + 30 + Math.random() * Math.max(20, floorWidth - chute.width - 50);
+                const py = startY - (Math.random() * 70);
+
+                plushies.push({
+                    x: px,
+                    y: py,
+                    vx: 0,
+                    vy: 0,
+                    radius: radius,
+                    rotation: (Math.random() - 0.5) * 0.4,
+                    type: selectedType,
+                    isGrabbed: false,
+                    id: Math.random().toString(36).substring(2, 9)
+                });
+            }
+        }
+
+        function shufflePlushies() {
+            if (claw.state !== 'IDLE') return;
+            const logicalW = cw / window.devicePixelRatio;
+            const logicalH = ch / window.devicePixelRatio;
+            const floorWidth = logicalW - 40;
+            const startY = logicalH - 65;
+
+            plushies.forEach(p => {
+                p.x = chute.width + 30 + Math.random() * Math.max(20, floorWidth - chute.width - 50);
+                p.y = startY - (Math.random() * 70);
+                p.rotation = (Math.random() - 0.5) * 0.8;
+            });
+            audio.playGrab();
+            updateStatus("已重新排列娃娃位置！祝你好運！", "text-cyan-300");
+        }
+
+        function refreshPlushiesPool() {
+            if (claw.state !== 'IDLE') return;
+            spawnPlushies();
+            audio.playWin();
+            updateStatus("娃娃機池已成功刷新！全新品種上架！", "text-emerald-300");
+        }
+
+        document.getElementById('shuffleBtn').addEventListener('click', shufflePlushies);
+        document.getElementById('refreshPoolBtn').addEventListener('click', refreshPlushiesPool);
+
+        // === 5. Canvas 繪製方法 ===
+        function drawMachineInterior(logicalW, logicalH) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.lineWidth = 1;
+            const gridSize = 30;
+            for (let x = 0; x < logicalW; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, logicalH); ctx.stroke();
+            }
+            for (let y = 0; y < logicalH; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(logicalW, y); ctx.stroke();
+            }
+
+            const cHeight = 80;
+            const cWidth = 85;
+            chute.x = 10;
+            chute.y = logicalH - cHeight - 10;
+            chute.width = cWidth;
+            chute.height = cHeight;
+
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(chute.x, chute.y, chute.width, chute.height);
+
+            ctx.fillStyle = 'rgba(236, 72, 153, 0.3)';
+            ctx.fillRect(chute.x + chute.width - 6, chute.y - 30, 6, chute.height + 30);
+            ctx.strokeStyle = '#ec4899';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(chute.x + chute.width - 6, chute.y - 30, 6, chute.height + 30);
+
+            ctx.fillStyle = '#f472b6';
+            ctx.font = '900 12px "Fredoka", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('DROP EXIT', chute.x + chute.width / 2 - 3, chute.y + 35);
+            ctx.fillText('▼', chute.x + chute.width / 2 - 3, chute.y + 52);
+        }
+
+        function drawPlushieOnCtx(targetCtx, p) {
+            const radius = p.radius || 24;
+            targetCtx.save();
+            targetCtx.translate(p.x, p.y);
+            targetCtx.rotate(p.rotation || 0);
+
+            targetCtx.beginPath();
+            targetCtx.ellipse(0, radius - 2, radius * 0.8, 6, 0, 0, Math.PI * 2);
+            targetCtx.fillStyle = 'rgba(0,0,0,0.25)';
+            targetCtx.fill();
+
+            targetCtx.beginPath();
+            targetCtx.arc(0, 0, radius, 0, Math.PI * 2);
+            targetCtx.fillStyle = p.type.color;
+            targetCtx.fill();
+            targetCtx.lineWidth = 2.5;
+            targetCtx.strokeStyle = '#0f172a';
+            targetCtx.stroke();
+
+            targetCtx.beginPath();
+            targetCtx.arc(-radius * 0.3, -radius * 0.3, radius * 0.35, 0, Math.PI * 2);
+            targetCtx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            targetCtx.fill();
+
+            targetCtx.font = `${radius * 1.25}px sans-serif`;
+            targetCtx.textAlign = 'center';
+            targetCtx.textBaseline = 'middle';
+            targetCtx.fillText(p.type.emoji, 0, 2);
+
+            if (p.type.rarity === 'legendary' || p.type.rarity === 'epic') {
+                targetCtx.beginPath();
+                targetCtx.arc(0, 0, radius + 3, 0, Math.PI * 2);
+                targetCtx.strokeStyle = p.type.rarity === 'legendary' ? '#fbbf24' : '#c084fc';
+                targetCtx.lineWidth = 2;
+                targetCtx.setLineDash([4, 4]);
+                targetCtx.stroke();
+                targetCtx.setLineDash([]);
+            }
+
+            targetCtx.restore();
+        }
+
+        function drawPlushie(p) {
+            drawPlushieOnCtx(ctx, p);
+        }
+
+        function drawRealisticClawOnCtx(targetCtx, cState, logicalW) {
+            const topRailY = 25;
+
+            const railGrad = targetCtx.createLinearGradient(0, topRailY - 6, 0, topRailY + 6);
+            railGrad.addColorStop(0, '#475569');
+            railGrad.addColorStop(0.5, '#94a3b8');
+            railGrad.addColorStop(1, '#1e293b');
+            targetCtx.fillStyle = railGrad;
+            targetCtx.fillRect(10, topRailY - 6, logicalW - 20, 12);
+            targetCtx.strokeStyle = '#cbd5e1';
+            targetCtx.lineWidth = 1;
+            targetCtx.strokeRect(10, topRailY - 6, logicalW - 20, 12);
+
+            const motorGrad = targetCtx.createLinearGradient(cState.x - 22, 0, cState.x + 22, 0);
+            motorGrad.addColorStop(0, '#db2777');
+            motorGrad.addColorStop(0.5, '#f472b6');
+            motorGrad.addColorStop(1, '#9d174d');
+            targetCtx.fillStyle = motorGrad;
+            targetCtx.fillRect(cState.x - 22, topRailY - 10, 44, 20);
+            targetCtx.strokeStyle = '#ffffff';
+            targetCtx.lineWidth = 1.5;
+            targetCtx.strokeRect(cState.x - 22, topRailY - 10, 44, 20);
+
+            targetCtx.beginPath();
+            targetCtx.moveTo(cState.x - 2, topRailY + 10);
+            targetCtx.lineTo(cState.x - 2, cState.clawY - 20);
+            targetCtx.moveTo(cState.x + 2, topRailY + 10);
+            targetCtx.lineTo(cState.x + 2, cState.clawY - 20);
+            targetCtx.strokeStyle = '#e2e8f0';
+            targetCtx.lineWidth = 2;
+            targetCtx.stroke();
+
+            targetCtx.beginPath();
+            const springTop = cState.clawY - 22;
+            const springHeight = 18;
+            const turns = 6;
+            for (let i = 0; i <= turns; i++) {
+                const sy = springTop + (i / turns) * springHeight;
+                const sx = cState.x + (i % 2 === 0 ? -6 : 6);
+                if (i === 0) targetCtx.moveTo(cState.x, sy);
+                else targetCtx.lineTo(sx, sy);
+            }
+            targetCtx.strokeStyle = '#94a3b8';
+            targetCtx.lineWidth = 2.5;
+            targetCtx.stroke();
+
+            targetCtx.save();
+            targetCtx.translate(cState.x, cState.clawY);
+
+            const cylGrad = targetCtx.createLinearGradient(-15, -10, 15, 10);
+            cylGrad.addColorStop(0, '#64748b');
+            cylGrad.addColorStop(0.3, '#f1f5f9');
+            cylGrad.addColorStop(0.7, '#334155');
+            cylGrad.addColorStop(1, '#0f172a');
+            
+            targetCtx.beginPath();
+            if (targetCtx.roundRect) {
+                targetCtx.roundRect(-15, -12, 30, 24, 6);
+            } else {
+                targetCtx.rect(-15, -12, 30, 24);
+            }
+            targetCtx.fillStyle = cylGrad;
+            targetCtx.fill();
+            targetCtx.strokeStyle = '#ffffff';
+            targetCtx.lineWidth = 1.5;
+            targetCtx.stroke();
+
+            targetCtx.fillStyle = '#cbd5e1';
+            targetCtx.beginPath();
+            targetCtx.arc(-9, -5, 2, 0, Math.PI * 2);
+            targetCtx.arc(9, -5, 2, 0, Math.PI * 2);
+            targetCtx.arc(-9, 5, 2, 0, Math.PI * 2);
+            targetCtx.arc(9, 5, 2, 0, Math.PI * 2);
+            targetCtx.fill();
+
+            const prongLength = 38;
+            const angle = cState.openAngle;
+
+            function drawProngArm(rotAngle, scaleX = 1) {
+                targetCtx.save();
+                targetCtx.rotate(rotAngle);
+                targetCtx.scale(scaleX, 1);
+
+                const armGrad = targetCtx.createLinearGradient(0, 0, 0, prongLength);
+                armGrad.addColorStop(0, '#e2e8f0');
+                armGrad.addColorStop(0.5, '#94a3b8');
+                armGrad.addColorStop(1, '#475569');
+
+                targetCtx.beginPath();
+                targetCtx.moveTo(0, 0);
+                targetCtx.lineTo(0, prongLength * 0.65);
+                targetCtx.lineTo(-14, prongLength);
+                targetCtx.lineWidth = 6;
+                targetCtx.lineCap = 'round';
+                targetCtx.lineJoin = 'round';
+                targetCtx.strokeStyle = armGrad;
+                targetCtx.stroke();
+
+                targetCtx.beginPath();
+                targetCtx.arc(0, prongLength * 0.65, 3.5, 0, Math.PI * 2);
+                targetCtx.fillStyle = '#fbbf24';
+                targetCtx.fill();
+
+                targetCtx.beginPath();
+                targetCtx.arc(-14, prongLength, 4.5, 0, Math.PI * 2);
+                targetCtx.fillStyle = '#ec4899';
+                targetCtx.fill();
+                targetCtx.strokeStyle = '#ffffff';
+                targetCtx.lineWidth = 1;
+                targetCtx.stroke();
+
+                targetCtx.restore();
+            }
+
+            drawProngArm(0, 0.7);
+            drawProngArm(-angle);
+            drawProngArm(angle);
+
+            targetCtx.restore();
+        }
+
+        function drawClaw(logicalW) {
+            drawRealisticClawOnCtx(ctx, claw, logicalW);
+        }
+
+        function recordCurrentFrame() {
+            if (!isRecording) return;
+            const logicalW = cw / window.devicePixelRatio;
+            const logicalH = ch / window.devicePixelRatio;
+
+            replayFrames.push({
+                claw: { x: claw.x, clawY: claw.clawY, openAngle: claw.openAngle },
+                plushies: plushies.map(p => ({
+                    x: p.x, 
+                    y: p.y, 
+                    rotation: p.rotation, 
+                    radius: p.radius || 24,
+                    type: p.type, 
+                    isGrabbed: p.isGrabbed, 
+                    id: p.id
+                })),
+                logicalW: logicalW,
+                logicalH: logicalH
+            });
+        }
+
+        // === 6. 物理與爪子狀態控制 update ===
+        function updatePhysics() {
+            const logicalW = cw / window.devicePixelRatio;
+            const logicalH = ch / window.devicePixelRatio;
+
+            claw.minX = 40;
+            claw.maxX = logicalW - 40;
+
+            if (claw.state === 'MOVING_LEFT') {
+                claw.x = Math.max(claw.minX, claw.x - claw.speed);
+                audio.playMove();
+            } else if (claw.state === 'MOVING_RIGHT') {
+                claw.x = Math.min(claw.maxX, claw.x + claw.speed);
+                audio.playMove();
+            }
+
+            if (claw.state === 'DROPPING') {
+                recordCurrentFrame();
+                claw.clawY += claw.dropSpeed;
+                claw.openAngle = claw.maxAngle;
+
+                let hitPlushie = null;
+                for (let p of plushies) {
+                    const dx = claw.x - p.x;
+                    const dy = claw.clawY + 25 - p.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < p.radius + 15) {
+                        hitPlushie = p;
+                        break;
+                    }
+                }
+
+                if (hitPlushie || claw.clawY >= logicalH - 100) {
+                    claw.state = 'CLOSING';
+                    audio.playGrab();
+                }
+            }
+
+            if (claw.state === 'CLOSING') {
+                recordCurrentFrame();
+                claw.openAngle -= 0.04;
+                if (claw.openAngle <= claw.minAngle) {
+                    claw.openAngle = claw.minAngle;
+                    
+                    let closest = null;
+                    let minDist = 40;
+                    for (let p of plushies) {
+                        const dx = claw.x - p.x;
+                        const dy = (claw.clawY + 25) - p.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closest = p;
+                        }
+                    }
+
+                    if (closest) {
+                        const success = Math.random() <= closest.type.catchRate;
+                        if (success) {
+                            claw.grabbedPlushie = closest;
+                            closest.isGrabbed = true;
+                        } else {
+                            claw.grabbedPlushie = closest;
+                            closest.isGrabbed = true;
+                            claw.willDropMidway = true;
+                        }
+                    }
+
+                    claw.state = 'RETRACTING';
+                }
+            }
+
+            if (claw.state === 'RETRACTING') {
+                recordCurrentFrame();
+                claw.clawY -= claw.retractSpeed;
+
+                if (claw.grabbedPlushie) {
+                    claw.grabbedPlushie.x = claw.x;
+                    claw.grabbedPlushie.y = claw.clawY + 30;
+
+                    if (claw.willDropMidway && claw.clawY < logicalH - 220) {
+                        claw.grabbedPlushie.isGrabbed = false;
+                        claw.grabbedPlushie.vy = 2;
+                        claw.grabbedPlushie = null;
+                        claw.willDropMidway = false;
+                        audio.playFail();
+                        updateStatus("公仔輕微滑落～ 再抓一次必中！", "text-rose-400");
+                    }
+                }
+
+                if (claw.clawY <= 50) {
+                    claw.clawY = 50;
+                    claw.state = 'RETURNING';
+                }
+            }
+
+            if (claw.state === 'RETURNING') {
+                recordCurrentFrame();
+                const targetX = chute.x + chute.width / 2;
+                if (claw.x > targetX) {
+                    claw.x -= claw.speed;
+                    if (claw.grabbedPlushie) {
+                        claw.grabbedPlushie.x = claw.x;
+                        claw.grabbedPlushie.y = claw.clawY + 30;
+                    }
+                } else {
+                    claw.x = targetX;
+                    claw.state = 'RELEASING';
+                }
+            }
+
+            if (claw.state === 'RELEASING') {
+                recordCurrentFrame();
+                claw.openAngle += 0.04;
+                if (claw.openAngle >= claw.maxAngle) {
+                    claw.openAngle = claw.maxAngle;
+
+                    if (claw.grabbedPlushie) {
+                        const p = claw.grabbedPlushie;
+                        p.isGrabbed = false;
+                        p.vy = 5;
+
+                        onPlushieCaught(p);
+                        claw.grabbedPlushie = null;
+                    } else {
+                        updateStatus("沒抓到公仔～ 再試一次吧！", "text-amber-300");
+                    }
+
+                    isRecording = false;
+
+                    setTimeout(() => {
+                        claw.state = 'IDLE';
+                        claw.openAngle = 0.5;
+                        updateStatus("準備就緒！移動爪子並下爪！", "text-yellow-300");
+                    }, 800);
+                }
+            }
+
+            for (let p of plushies) {
+                if (!p.isGrabbed) {
+                    if (p.vy) {
+                        p.y += p.vy;
+                        p.vy += 0.4;
+                        if (p.y > logicalH + 40) {
+                            plushies = plushies.filter(item => item.id !== p.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        // === 7. 主繪製循環 ===
+        function gameLoop() {
+            const logicalW = cw / window.devicePixelRatio;
+            const logicalH = ch / window.devicePixelRatio;
+
+            ctx.clearRect(0, 0, logicalW, logicalH);
+
+            drawMachineInterior(logicalW, logicalH);
+            plushies.forEach(p => drawPlushie(p));
+            drawClaw(logicalW);
+            updatePhysics();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function showWinModal(plushie, reward) {
+            const winModal = document.getElementById('winModal');
+            document.getElementById('winPlushiePreview').innerText = plushie.type.emoji;
+            document.getElementById('winPlushieName').innerText = plushie.type.name;
+            document.getElementById('winPlushieDesc').innerText = plushie.type.desc;
+            document.getElementById('winRarityBadge').innerText = `${plushie.type.rarityText} ${plushie.type.rarity.toUpperCase()}`;
+            document.getElementById('winCoinReward').innerText = `+${reward} 金幣`;
+            
+            winModal.classList.remove('hidden');
+            setTimeout(() => winModal.classList.remove('opacity-0'), 10);
+        }
+
+        document.getElementById('closeWinBtn').addEventListener('click', () => {
+            const winModal = document.getElementById('winModal');
+            winModal.classList.add('opacity-0');
+            setTimeout(() => winModal.classList.add('hidden'), 300);
+        });
+
+        function onPlushieCaught(plushie) {
+            audio.playWin();
+            lastCaughtPlushie = plushie;
+            
+            caughtCounts[plushie.type.id] = (caughtCounts[plushie.type.id] || 0) + 1;
+            
+            const rewardCoins = plushie.type.points;
+            coins += rewardCoins;
+            document.getElementById('coinCount').innerText = coins;
+
+            updateCollectionUI();
+            showWinModal(plushie, rewardCoins);
+        }
+
+        function triggerDrop() {
+            if (claw.state !== 'IDLE') return;
+
+            if (coins <= 0) {
+                updateStatus("代幣不足！請點擊右上角補充代幣！", "text-rose-400 font-bold");
+                audio.playFail();
+                return;
+            }
+
+            coins--;
+            document.getElementById('coinCount').innerText = coins;
+            audio.playCoin();
+
+            replayFrames = [];
+            isRecording = true;
+
+            claw.state = 'DROPPING';
+            updateStatus("爪子下降中...", "text-cyan-300");
+        }
+
+        // === 8. 下載與匯出功能 (相容性大幅增強) ===
+        function triggerBlobDownload(blob, filename) {
+            activeCardBlob = blob;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            // 展示預覽彈窗 (確保手機版／WebView 防封鎖時可長按儲存)
+            const previewImg = document.getElementById('cardPreviewImg');
+            previewImg.src = url;
+
+            const previewModal = document.getElementById('cardPreviewModal');
+            previewModal.classList.remove('hidden');
+            setTimeout(() => previewModal.classList.remove('opacity-0'), 10);
+
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 30000);
+        }
+
+        function downloadPlushieCard(plushie) {
+            if (!plushie) return;
+
+            const cardCanvas = document.createElement('canvas');
+            cardCanvas.width = 600;
+            cardCanvas.height = 800;
+            const cctx = cardCanvas.getContext('2d');
+
+            const bgGrad = cctx.createLinearGradient(0, 0, 0, 800);
+            bgGrad.addColorStop(0, '#0f172a');
+            bgGrad.addColorStop(0.5, '#1e1b4b');
+            bgGrad.addColorStop(1, '#020617');
+            cctx.fillStyle = bgGrad;
+            cctx.fillRect(0, 0, 600, 800);
+
+            cctx.strokeStyle = '#ec4899';
+            cctx.lineWidth = 10;
+            cctx.strokeRect(20, 20, 560, 760);
+
+            cctx.fillStyle = '#fde047';
+            cctx.font = '900 32px "Fredoka", sans-serif';
+            cctx.textAlign = 'center';
+            cctx.fillText('👑 夢幻夾娃娃機 紀念卡 👑', 300, 80);
+
+            cctx.fillStyle = '#1e293b';
+            cctx.strokeStyle = '#38bdf8';
+            cctx.lineWidth = 4;
+            cctx.beginPath();
+            if (cctx.roundRect) {
+                cctx.roundRect(100, 130, 400, 400, 24);
+            } else {
+                cctx.rect(100, 130, 400, 400);
+            }
+            cctx.fill();
+            cctx.stroke();
+
+            cctx.font = '180px sans-serif';
+            cctx.textBaseline = 'middle';
+            cctx.fillText(plushie.type.emoji, 300, 330);
+
+            cctx.fillStyle = '#ffffff';
+            cctx.font = '900 36px "Noto Sans TC", sans-serif';
+            cctx.fillText(plushie.type.name, 300, 580);
+
+            cctx.fillStyle = '#f472b6';
+            cctx.font = 'bold 22px "Noto Sans TC", sans-serif';
+            cctx.fillText(`稀有等級: ${plushie.type.rarityText} (${plushie.type.rarity.toUpperCase()})`, 300, 630);
+
+            const dateStr = new Date().toLocaleString('zh-HK');
+            cctx.fillStyle = '#94a3b8';
+            cctx.font = '18px sans-serif';
+            cctx.fillText(`抓獲時間: ${dateStr}`, 300, 710);
+
+            cardCanvas.toBlob((blob) => {
+                if (!blob) return;
+
+                // 若支援移動端原生分享，優先調用原生分享介面
+                if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'card.png', { type: 'image/png' })] })) {
+                    const file = new File([blob], `${plushie.type.name}_夾公仔紀念卡.png`, { type: 'image/png' });
+                    navigator.share({
+                        files: [file],
+                        title: '夢幻夾公仔紀念卡',
+                        text: `我在夾公仔遊戲中成功抓到了【${plushie.type.name}】！`
+                    }).catch(() => {
+                        triggerBlobDownload(blob, `${plushie.type.name}_夾公仔紀念卡.png`);
+                    });
+                } else {
+                    triggerBlobDownload(blob, `${plushie.type.name}_夾公仔紀念卡.png`);
+                }
+            }, 'image/png');
+        }
+
+        document.getElementById('downloadCardBtn').addEventListener('click', () => {
+            if (lastCaughtPlushie) {
+                downloadPlushieCard(lastCaughtPlushie);
+            }
+        });
+
+        document.getElementById('closePreviewBtn').addEventListener('click', () => {
+            const previewModal = document.getElementById('cardPreviewModal');
+            previewModal.classList.add('opacity-0');
+            setTimeout(() => previewModal.classList.add('hidden'), 300);
+        });
+
+        document.getElementById('manualDownloadBtn').addEventListener('click', () => {
+            if (activeCardBlob && lastCaughtPlushie) {
+                const url = URL.createObjectURL(activeCardBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${lastCaughtPlushie.type.name}_夾公仔紀念卡.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        });
+
+        // === 9. 精彩影片匯出功能 (MediaRecorder WebM) ===
+        function exportReplayAsVideo() {
+            if (replayFrames.length === 0) {
+                alert('暫無抓取畫面記錄！');
+                return;
+            }
+
+            const recCanvas = document.createElement('canvas');
+            recCanvas.width = 400;
+            recCanvas.height = 500;
+            const recCtx = recCanvas.getContext('2d');
+
+            let mimeType = 'video/webm;codecs=vp9';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                if (MediaRecorder.isTypeSupported('video/webm')) mimeType = 'video/webm';
+                else if (MediaRecorder.isTypeSupported('video/mp4')) mimeType = 'video/mp4';
+                else mimeType = '';
+            }
+
+            if (!recCanvas.captureStream || !window.MediaRecorder || !mimeType) {
+                alert('您的瀏覽器暫不支援影片導出功能，建議使用最新版 Chrome 或 Safari 瀏覽器。');
+                return;
+            }
+
+            updateStatus("正在合成精彩抓取影片...", "text-pink-400 font-bold");
+
+            const stream = recCanvas.captureStream(30);
+            const mediaRecorder = new MediaRecorder(stream, { mimeType });
+            const chunks = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) chunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(chunks, { type: mimeType });
+                const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `夾公仔精彩重播_${Date.now()}.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                updateStatus("精彩影片已下載完成！", "text-emerald-300");
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+            };
+
+            mediaRecorder.start();
+
+            let frameIdx = 0;
+            const interval = setInterval(() => {
+                if (frameIdx >= replayFrames.length) {
+                    clearInterval(interval);
+                    mediaRecorder.stop();
+                    return;
+                }
+
+                const frame = replayFrames[frameIdx];
+                const logW = frame.logicalW;
+                const logH = frame.logicalH;
+
+                recCtx.save();
+                recCtx.scale(recCanvas.width / logW, recCanvas.height / logH);
+                recCtx.clearRect(0, 0, logW, logH);
+
+                recCtx.fillStyle = '#090d16';
+                recCtx.fillRect(0, 0, logW, logH);
+
+                recCtx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+                recCtx.lineWidth = 1;
+                for (let x = 0; x < logW; x += 30) {
+                    recCtx.beginPath(); recCtx.moveTo(x, 0); recCtx.lineTo(x, logH); recCtx.stroke();
+                }
+                for (let y = 0; y < logH; y += 30) {
+                    recCtx.beginPath(); recCtx.moveTo(0, y); recCtx.lineTo(logW, y); recCtx.stroke();
+                }
+
+                recCtx.fillRect(chute.x, chute.y, chute.width, chute.height);
+                frame.plushies.forEach(p => drawPlushieOnCtx(recCtx, p));
+                drawRealisticClawOnCtx(recCtx, frame.claw, logW);
+
+                recCtx.restore();
+
+                frameIdx++;
+            }, 1000 / 30);
+        }
+
+        document.getElementById('downloadWinVideoBtn').addEventListener('click', exportReplayAsVideo);
+        document.getElementById('exportVideoBtn').addEventListener('click', exportReplayAsVideo);
+
+        // === 10. 重播 Modal 播放邏輯 ===
+        const replayModal = document.getElementById('replayModal');
+        const replayCanvas = document.getElementById('replayCanvas');
+        const rctx = replayCanvas.getContext('2d');
+        let currentFrameIdx = 0;
+
+        function startReplayPlayback() {
+            if (replayFrames.length === 0) return;
+            if (replayAnimationId) cancelAnimationFrame(replayAnimationId);
+
+            currentFrameIdx = 0;
+            const rect = replayCanvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+
+            replayCanvas.width = rect.width * dpr;
+            replayCanvas.height = rect.height * dpr;
+
+            function playFrame() {
+                if (currentFrameIdx >= replayFrames.length) {
+                    currentFrameIdx = 0;
+                }
+
+                const frame = replayFrames[Math.floor(currentFrameIdx)];
+                const logW = frame.logicalW;
+                const logH = frame.logicalH;
+
+                rctx.save();
+                const scaleX = replayCanvas.width / logW;
+                const scaleY = replayCanvas.height / logH;
+                rctx.scale(scaleX, scaleY);
+                rctx.clearRect(0, 0, logW, logH);
+
+                rctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+                rctx.lineWidth = 1;
+                for (let x = 0; x < logW; x += 30) {
+                    rctx.beginPath(); rctx.moveTo(x, 0); rctx.lineTo(x, logH); rctx.stroke();
+                }
+                for (let y = 0; y < logH; y += 30) {
+                    rctx.beginPath(); rctx.moveTo(0, y); rctx.lineTo(logW, y); rctx.stroke();
+                }
+
+                rctx.fillStyle = '#090d16';
+                rctx.fillRect(chute.x, chute.y, chute.width, chute.height);
+
+                frame.plushies.forEach(p => drawPlushieOnCtx(rctx, p));
+                drawRealisticClawOnCtx(rctx, frame.claw, logW);
+
+                rctx.restore();
+
+                currentFrameIdx += replaySpeed;
+                replayAnimationId = requestAnimationFrame(playFrame);
+            }
+
+            playFrame();
+        }
+
+        document.getElementById('replayCatchBtn').addEventListener('click', () => {
+            if (replayFrames.length === 0) return;
+            replayModal.classList.remove('hidden');
+            setTimeout(() => replayModal.classList.remove('opacity-0'), 10);
+            startReplayPlayback();
+        });
+
+        document.getElementById('closeReplayBtn').addEventListener('click', () => {
+            if (replayAnimationId) cancelAnimationFrame(replayAnimationId);
+            replayModal.classList.add('opacity-0');
+            setTimeout(() => replayModal.classList.add('hidden'), 300);
+        });
+
+        document.getElementById('restartReplayBtn').addEventListener('click', () => {
+            currentFrameIdx = 0;
+        });
+
+        document.getElementById('speedReplayBtn').addEventListener('click', () => {
+            if (replaySpeed === 1.0) replaySpeed = 1.8;
+            else if (replaySpeed === 1.8) replaySpeed = 0.5;
+            else replaySpeed = 1.0;
+
+            document.getElementById('speedText').innerText = `${replaySpeed}x`;
+        });
+
+        // 鍵盤與按鈕控制監聽
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnDrop = document.getElementById('btnDrop');
+
+        function bindMoveBtn(btn, stateName) {
+            const start = (e) => {
+                e.preventDefault();
+                if (claw.state === 'IDLE' || claw.state === 'MOVING_LEFT' || claw.state === 'MOVING_RIGHT') {
+                    claw.state = stateName;
+                }
+            };
+            const end = (e) => {
+                e.preventDefault();
+                if (claw.state === stateName) {
+                    claw.state = 'IDLE';
+                }
+            };
+
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', end);
+            btn.addEventListener('mouseleave', end);
+            btn.addEventListener('touchstart', start);
+            btn.addEventListener('touchend', end);
+        }
+
+        bindMoveBtn(btnLeft, 'MOVING_LEFT');
+        bindMoveBtn(btnRight, 'MOVING_RIGHT');
+
+        btnDrop.addEventListener('click', triggerDrop);
+
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                if (claw.state === 'IDLE') claw.state = 'MOVING_LEFT';
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                if (claw.state === 'IDLE') claw.state = 'MOVING_RIGHT';
+            } else if (e.key === ' ' || e.key === 'Enter') {
+                triggerDrop();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                if (claw.state === 'MOVING_LEFT') claw.state = 'IDLE';
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                if (claw.state === 'MOVING_RIGHT') claw.state = 'IDLE';
+            }
+        });
+
+        document.getElementById('addCoinBtn').addEventListener('click', () => {
+            coins += 5;
+            document.getElementById('coinCount').innerText = coins;
+            audio.playCoin();
+            updateStatus("已免費補充 5 枚代幣！快來夾娃娃吧！", "text-green-400");
+        });
+
+        // === 11. 圖鑑邏輯 ===
+        function updateCollectionUI() {
+            let unlockedCount = 0;
+            let totalCaught = 0;
+
+            PLUSHIE_TYPES.forEach(pt => {
+                const count = caughtCounts[pt.id] || 0;
+                if (count > 0) unlockedCount++;
+                totalCaught += count;
+            });
+
+            document.getElementById('caughtUniqueCount').innerText = unlockedCount;
+            document.getElementById('colUnlockedCount').innerText = unlockedCount;
+            document.getElementById('colTotalCaught').innerText = totalCaught;
+
+            const grid = document.getElementById('collectionGrid');
+            grid.innerHTML = '';
+
+            PLUSHIE_TYPES.forEach(pt => {
+                const count = caughtCounts[pt.id] || 0;
+                const isUnlocked = count > 0;
+
+                const card = document.createElement('div');
+                card.className = `p-3 rounded-2xl border flex flex-col items-center justify-between transition ${
+                    isUnlocked 
+                        ? 'bg-slate-800 border-indigo-500/50 text-white' 
+                        : 'bg-slate-900/60 border-slate-800 text-slate-500 opacity-60'
+                }`;
+
+                card.innerHTML = `
+                    <div class="text-4xl mb-1 ${isUnlocked ? '' : 'filter grayscale'}">
+                        ${isUnlocked ? pt.emoji : '❓'}
+                    </div>
+                    <div class="text-xs font-bold text-center mb-0.5">${isUnlocked ? pt.name : '未解鎖'}</div>
+                    <div class="text-[10px] font-black px-2 py-0.5 rounded-full ${
+                        pt.rarity === 'legendary' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                        pt.rarity === 'epic' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' :
+                        pt.rarity === 'rare' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
+                        'bg-slate-700 text-slate-300'
+                    }">
+                        ${pt.rarityText}
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-1 font-bold">
+                        已抓到: <span class="${isUnlocked ? 'text-yellow-400' : 'text-slate-500'}">${count}</span> 隻
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        const collectionModal = document.getElementById('collectionModal');
+        document.getElementById('collectionBtn').addEventListener('click', () => {
+            updateCollectionUI();
+            collectionModal.classList.remove('hidden');
+            setTimeout(() => collectionModal.classList.remove('opacity-0'), 10);
+        });
+
+        document.getElementById('closeCollectionBtn').addEventListener('click', () => {
+            collectionModal.classList.add('opacity-0');
+            setTimeout(() => collectionModal.classList.add('hidden'), 300);
+        });
+
+        const soundToggle = document.getElementById('soundToggle');
+        const soundIcon = document.getElementById('soundIcon');
+        soundToggle.addEventListener('click', () => {
+            audio.muted = !audio.muted;
+            if (audio.muted) {
+                soundIcon.className = 'fa-solid fa-volume-xmark text-rose-400';
+                soundToggle.style.color = '#f43f5e';
+            } else {
+                soundIcon.className = 'fa-solid fa-volume-high text-cyan-400';
+                soundToggle.style.color = '';
+            }
+        });
+
+        // === 12. 初始化啟動 ===
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            claw.x = cw / window.devicePixelRatio / 2;
+        });
+
+        window.onload = function() {
+            resizeCanvas();
+            claw.x = (cw / window.devicePixelRatio) / 2;
+            spawnPlushies();
+            updateCollectionUI();
+            
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
